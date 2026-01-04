@@ -54,13 +54,33 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         controllerFuture?.addListener({
             controller = controllerFuture?.get()
             setupPlayerListener()
+            
+            // Sync initial state from service
+            controller?.let { player ->
+                if (player.isPlaying) {
+                    _isPlaying.value = true
+                    // Try to restore current song from media item
+                    player.currentMediaItem?.let { item ->
+                        val id = item.mediaId.toLongOrNull()
+                        if (id != null) {
+                             // We might not have songs loaded yet, so this might be tricky if we don't load songs first
+                             // But we can update the ID at least or wait for songs to load
+                             _currentSong.value = _songs.value.find { it.id == id }
+                             // If songs are not loaded, this will remain null until they are, 
+                             // and we'll need to check again after loading songs.
+                        }
+                    }
+                }
+            }
         }, MoreExecutors.directExecutor())
         
         // Polling for progress update
         viewModelScope.launch {
             while (true) {
-                if (_isPlaying.value) {
+                // Check if playing from controller directly as _isPlaying might be delayed
+                if (controller?.isPlaying == true) {
                     _progress.value = controller?.currentPosition ?: 0L
+                    _isPlaying.value = true // Ensure state matches
                 }
                 delay(1000)
             }
@@ -103,8 +123,21 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val localSongs = repository.getLocalSongs()
             _songs.value = localSongs
-            // If we have songs and player is ready, maybe set playlist? 
-            // For now we just load them into memory.
+            
+            // After loading songs, check if the service is already playing something and sync it
+             controller?.currentMediaItem?.let { item ->
+                val id = item.mediaId.toLongOrNull()
+                if (id != null) {
+                    val foundSong = localSongs.find { it.id == id }
+                    if (foundSong != null) {
+                        _currentSong.value = foundSong
+                        _isPlaying.value = controller?.isPlaying == true
+                         if (_isPlaying.value) {
+                             _duration.value = controller?.duration ?: 0L
+                         }
+                    }
+                }
+            }
         }
     }
 

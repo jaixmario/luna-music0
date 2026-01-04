@@ -1,6 +1,7 @@
 package com.mario.luna.ui
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mario.luna.ui.components.FullScreenPlayer
 import com.mario.luna.ui.components.MiniPlayer
@@ -58,6 +60,12 @@ fun HomeScreen(
             viewModel.loadSongs()
         }
     }
+    
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        // Notification permission granted or denied, not critical for app function but good for controls
+    }
 
     LaunchedEffect(Unit) {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -65,7 +73,20 @@ fun HomeScreen(
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
-        permissionLauncher.launch(permission)
+        
+        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) {
+             hasPermission = true
+             viewModel.loadSongs()
+        } else {
+             permissionLauncher.launch(permission)
+        }
+        
+        // Request notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
     }
 
     if (showFullScreenPlayer && currentSong != null) {
