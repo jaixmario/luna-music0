@@ -153,6 +153,12 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
         _currentSong.value = song
         
+        // If we haven't set the playlist yet or it's empty, set it up. 
+        // Or if we just want to restart the playlist order from the main list.
+        // For simplicity, we re-set the media items to ensure order matches the list.
+        // Optimization: Check if timeline matches _songs. 
+        // But re-setting with same items is usually handled well by ExoPlayer diffing.
+        
         val mediaItems = currentList.map { track ->
             val mediaMetadata = MediaMetadata.Builder()
                 .setTitle(track.title)
@@ -171,6 +177,53 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         player.setMediaItems(mediaItems, startIndex, 0L)
         player.prepare()
         player.play()
+    }
+    
+    fun playNext(song: Song) {
+        val player = controller ?: return
+        val count = player.mediaItemCount
+        var fromIndex = -1
+        
+        // Find the index of the song to move
+        for (i in 0 until count) {
+            val item = player.getMediaItemAt(i)
+            if (item.mediaId == song.id.toString()) {
+                fromIndex = i
+                break
+            }
+        }
+        
+        if (fromIndex != -1) {
+            var targetIndex = player.currentMediaItemIndex + 1
+            // If target is out of bounds (end of list), just move to end
+            if (targetIndex >= count) {
+                targetIndex = count - 1
+            }
+            
+            // If we are moving the item from before the current position, 
+            // the indices might shift. moveMediaItem handles this logic mostly, 
+            // but we want it effectively at current + 1.
+            
+            player.moveMediaItem(fromIndex, targetIndex)
+        }
+    }
+    
+    fun addToQueue(song: Song) {
+        val player = controller ?: return
+        val count = player.mediaItemCount
+        var fromIndex = -1
+        
+        for (i in 0 until count) {
+            val item = player.getMediaItemAt(i)
+            if (item.mediaId == song.id.toString()) {
+                fromIndex = i
+                break
+            }
+        }
+        
+        if (fromIndex != -1) {
+            player.moveMediaItem(fromIndex, count - 1)
+        }
     }
 
     fun play() {

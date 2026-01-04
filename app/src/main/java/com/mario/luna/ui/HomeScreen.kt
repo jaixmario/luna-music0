@@ -11,8 +11,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +24,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -233,11 +237,41 @@ fun HomeScreen(
                 ) {
                     items(songs) { song ->
                         val isCurrentSong = currentSong?.id == song.id
-                        MusicListItem(
-                            song = song,
-                            isPlaying = isCurrentSong && isPlaying,
-                            onClick = { viewModel.playSong(song) }
-                        )
+                        var showMenu by remember { mutableStateOf(false) }
+
+                        Box {
+                            MusicListItem(
+                                song = song,
+                                isPlaying = isCurrentSong && isPlaying,
+                                onClick = { viewModel.playSong(song) },
+                                onLongClick = { showMenu = true }
+                            )
+
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false },
+                                shape = RoundedCornerShape(16.dp),
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Play Next") },
+                                    leadingIcon = { Icon(Icons.Default.SkipNext, contentDescription = null) },
+                                    onClick = {
+                                        viewModel.playNext(song)
+                                        showMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Add to Queue") },
+                                    leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                                    onClick = {
+                                        viewModel.addToQueue(song)
+                                        showMenu = false
+                                    }
+                                )
+                            }
+                        }
+                        
                         Divider(
                             color = Color.LightGray.copy(alpha = 0.2f),
                             modifier = Modifier.padding(start = 88.dp) // Indent divider like iOS
