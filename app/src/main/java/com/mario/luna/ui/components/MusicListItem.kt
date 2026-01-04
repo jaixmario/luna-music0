@@ -1,12 +1,20 @@
 package com.mario.luna.ui.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +44,7 @@ import com.mario.luna.model.Song
 @Composable
 fun MusicListItem(
     song: Song,
+    isPlaying: Boolean = false,
     onClick: () -> Unit
 ) {
     Row(
@@ -49,6 +59,22 @@ fun MusicListItem(
                 .size(56.dp)
                 .clip(RoundedCornerShape(12.dp))
         ) {
+            // Background placeholder
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MusicNote,
+                    contentDescription = "Music",
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxSize(),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+            
+            // Album Art
             if (song.albumArtUri != null) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
@@ -57,62 +83,20 @@ fun MusicListItem(
                         .build(),
                     contentDescription = "Album Art",
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                    error = null // Don't show default error, handle with fallback below
+                    modifier = Modifier.fillMaxSize()
                 )
             }
             
-            // This will show if the image is loading, null, or fails (due to Box stacking, though precise fallback requires state handling with SubcomposeAsyncImage, 
-            // but for simplicity, we rely on the fact that if URI is null or Coil fails, we might want a fallback.
-            // Coil's AsyncImage with 'error' parameter is good, but to use a custom composable as error (like an Icon), we'd need `SubcomposeAsyncImage`.
-            // Let's stick to AsyncImage but use a placeholder if URI is null, or rely on `error` drawable if we had one.
-            // Since user wants a unique music icon:
-            
-            if (song.albumArtUri == null) {
+            // Playing Overlay
+            if (isPlaying) {
                 Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    color = Color.Black.copy(alpha = 0.5f),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = "Music",
-                        modifier = Modifier
-                            .padding(12.dp)
-                            .fillMaxSize(),
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                       AudioWaveAnimation()
+                    }
                 }
-            } else {
-                 // We can also set the error drawable to a resource if we have one, but here we want a composable fallback.
-                 // Using SubcomposeAsyncImage is better for this but let's try a simpler approach:
-                 // If URI is present, we try to load it. If it fails, Coil can show an error drawable. 
-                 // But the user requested a specific icon look. 
-                 // Let's use SubcomposeAsyncImage for best control or just layer it behind.
-                 // Layering behind: If the image loads, it covers the icon. If it has transparent parts, icon shows through (unlikely for album art).
-                 
-                 Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = "Music",
-                        modifier = Modifier
-                            .padding(12.dp)
-                            .fillMaxSize(),
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-                
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(song.albumArtUri)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = "Album Art",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
             }
         }
         
@@ -125,7 +109,8 @@ fun MusicListItem(
                 text = song.title,
                 style = MaterialTheme.typography.bodyLarge.copy(
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp
+                    fontSize = 16.sp,
+                    color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -133,7 +118,7 @@ fun MusicListItem(
             Text(
                 text = song.artist,
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    color = Color.Gray,
+                    color = if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) else Color.Gray,
                     fontSize = 14.sp
                 ),
                 maxLines = 1,
@@ -141,4 +126,63 @@ fun MusicListItem(
             )
         }
     }
+}
+
+@Composable
+fun AudioWaveAnimation() {
+    val infiniteTransition = rememberInfiniteTransition(label = "audio_wave")
+    
+    // Create 3 bars with different phases
+    val height1 by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar1"
+    )
+    
+    val height2 by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(650),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar2"
+    )
+    
+    val height3 by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar3"
+    )
+
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier.size(24.dp).padding(4.dp)
+    ) {
+        Bar(height1)
+        Spacer(modifier = Modifier.width(2.dp))
+        Bar(height2)
+        Spacer(modifier = Modifier.width(2.dp))
+        Bar(height3)
+    }
+}
+
+@Composable
+fun Bar(fraction: Float) {
+    Surface(
+        color = Color.White,
+        modifier = Modifier
+            .width(3.dp)
+            .fillMaxHeight(fraction)
+            .clip(RoundedCornerShape(2.dp))
+    ) {}
 }

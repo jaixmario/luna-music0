@@ -109,8 +109,10 @@ fun HomeScreen(
                     .padding(innerPadding)
             ) {
                 items(songs) { song ->
+                    val isCurrentSong = currentSong?.id == song.id
                     MusicListItem(
                         song = song,
+                        isPlaying = isCurrentSong && isPlaying,
                         onClick = { viewModel.playSong(song) }
                     )
                     Divider(
