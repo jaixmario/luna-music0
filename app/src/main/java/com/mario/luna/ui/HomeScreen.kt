@@ -2,7 +2,7 @@ package com.mario.luna.ui
 
 import android.Manifest
 import android.os.Build
-import androidx.activity.BackHandler
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
