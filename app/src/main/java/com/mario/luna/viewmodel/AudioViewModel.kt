@@ -1,13 +1,20 @@
 package com.mario.luna.viewmodel
 
 import android.app.Application
+import android.content.ComponentName
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import com.mario.luna.data.SongRepository
 import com.mario.luna.model.Song
+import com.mario.luna.service.PlaybackService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,65 +38,110 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration.asStateFlow()
 
-    private var player: ExoPlayer? = null
+    private var controllerFuture: ListenableFuture<MediaController>? = null
+    private var controller: MediaController? = null
 
     init {
-        initializePlayer()
+        initializeController()
     }
 
-    private fun initializePlayer() {
-        player = ExoPlayer.Builder(getApplication()).build().apply {
-            addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_READY) {
-                        _duration.value = duration
-                    }
-                    if (playbackState == Player.STATE_ENDED) {
-                        playNext()
-                    }
-                }
-
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    _isPlaying.value = isPlaying
-                }
-            })
-        }
-
+    private fun initializeController() {
+        val sessionToken = SessionToken(
+            getApplication(),
+            ComponentName(getApplication(), PlaybackService::class.java)
+        )
+        controllerFuture = MediaController.Builder(getApplication(), sessionToken).buildAsync()
+        controllerFuture?.addListener({
+            controller = controllerFuture?.get()
+            setupPlayerListener()
+        }, MoreExecutors.directExecutor())
+        
+        // Polling for progress update
         viewModelScope.launch {
             while (true) {
                 if (_isPlaying.value) {
-                    _progress.value = player?.currentPosition ?: 0L
+                    _progress.value = controller?.currentPosition ?: 0L
                 }
                 delay(1000)
             }
         }
+    }
+    
+    private fun setupPlayerListener() {
+        controller?.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    _duration.value = controller?.duration ?: 0L
+                }
+                if (playbackState == Player.STATE_ENDED) {
+                    playNext()
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                _isPlaying.value = isPlaying
+            }
+            
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                super.onMediaItemTransition(mediaItem, reason)
+                // When media item changes (e.g. from notification "Next"), update currentSong
+                if (mediaItem != null) {
+                   val id = mediaItem.mediaId.toLongOrNull()
+                   if (id != null) {
+                       // Find song by ID from loaded songs
+                       val foundSong = _songs.value.find { it.id == id }
+                       if (foundSong != null) {
+                           _currentSong.value = foundSong
+                       }
+                   }
+                }
+            }
+        })
     }
 
     fun loadSongs() {
         viewModelScope.launch {
             val localSongs = repository.getLocalSongs()
             _songs.value = localSongs
+            // If we have songs and player is ready, maybe set playlist? 
+            // For now we just load them into memory.
         }
     }
 
     fun playSong(song: Song) {
+        val player = controller ?: return
+        
         if (_currentSong.value?.id == song.id) {
             if (_isPlaying.value) pause() else play()
             return
         }
 
         _currentSong.value = song
-        player?.setMediaItem(MediaItem.fromUri(song.contentUri))
-        player?.prepare()
-        player?.play()
+        
+        val mediaMetadata = MediaMetadata.Builder()
+            .setTitle(song.title)
+            .setArtist(song.artist)
+            .setAlbumTitle(song.album)
+            .setArtworkUri(song.albumArtUri)
+            .build()
+            
+        val mediaItem = MediaItem.Builder()
+            .setUri(song.contentUri)
+            .setMediaId(song.id.toString())
+            .setMediaMetadata(mediaMetadata)
+            .build()
+
+        player.setMediaItem(mediaItem)
+        player.prepare()
+        player.play()
     }
 
     fun play() {
-        player?.play()
+        controller?.play()
     }
 
     fun pause() {
-        player?.pause()
+        controller?.pause()
     }
 
     fun playNext() {
@@ -99,7 +151,6 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         if (index != -1 && index < currentList.size - 1) {
             playSong(currentList[index + 1])
         } else if (currentList.isNotEmpty()) {
-             // Loop back to start or stop? Let's loop for now
              playSong(currentList[0])
         }
     }
@@ -116,13 +167,12 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun seekTo(position: Long) {
-        player?.seekTo(position)
+        controller?.seekTo(position)
         _progress.value = position
     }
 
     override fun onCleared() {
         super.onCleared()
-        player?.release()
-        player = null
+        controllerFuture?.let { MediaController.releaseFuture(it) }
     }
 }
