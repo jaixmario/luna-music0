@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,9 +49,16 @@ fun HomeScreen(
     // Full screen player state
     var showFullScreenPlayer by remember { mutableStateOf(false) }
     
+    // Settings state
+    var showSettings by remember { mutableStateOf(false) }
+    
     // Handle back button when player is open
-    BackHandler(enabled = showFullScreenPlayer) {
-        showFullScreenPlayer = false
+    BackHandler(enabled = showFullScreenPlayer || showSettings) {
+        if (showSettings) {
+            showSettings = false
+        } else {
+            showFullScreenPlayer = false
+        }
     }
     
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -89,7 +98,9 @@ fun HomeScreen(
         }
     }
 
-    if (showFullScreenPlayer && currentSong != null) {
+    if (showSettings) {
+        SettingsScreen(onDismiss = { showSettings = false })
+    } else if (showFullScreenPlayer && currentSong != null) {
         FullScreenPlayer(
             song = currentSong!!,
             isPlaying = isPlaying,
@@ -112,6 +123,11 @@ fun HomeScreen(
                                 fontWeight = FontWeight.Bold
                             )
                         ) 
+                    },
+                    actions = {
+                        IconButton(onClick = { showSettings = true }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
                     },
                     colors = TopAppBarDefaults.largeTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
