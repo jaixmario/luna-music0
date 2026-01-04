@@ -20,6 +20,38 @@ fun SettingsScreen(
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager.getInstance(context) }
     val backgroundPlayEnabled by settingsManager.backgroundPlayEnabled.collectAsState()
+    val userName by settingsManager.userName.collectAsState()
+    var showNameDialog by remember { mutableStateOf(false) }
+
+    if (showNameDialog) {
+        var tempName by remember { mutableStateOf(userName) }
+        AlertDialog(
+            onDismissRequest = { showNameDialog = false },
+            title = { Text("Change Name") },
+            text = {
+                OutlinedTextField(
+                    value = tempName,
+                    onValueChange = { tempName = it },
+                    label = { Text("Name") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settingsManager.setUserName(tempName)
+                        showNameDialog = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNameDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -39,6 +71,41 @@ fun SettingsScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
+            Text(
+                text = "Profile",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                ),
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Name",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = if (userName.isNotEmpty()) userName else "Set your name",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
+                Button(onClick = { showNameDialog = true }) {
+                    Text("Edit")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             Text(
                 text = "Playback",
                 style = MaterialTheme.typography.titleMedium.copy(

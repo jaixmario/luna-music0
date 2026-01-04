@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mario.luna.data.SettingsManager
 import com.mario.luna.ui.components.FullScreenPlayer
 import com.mario.luna.ui.components.MiniPlayer
 import com.mario.luna.ui.components.MusicListItem
@@ -42,6 +43,8 @@ fun HomeScreen(
     val duration by viewModel.duration.collectAsState()
 
     val context = LocalContext.current
+    val settingsManager = remember { SettingsManager.getInstance(context) }
+    val userName by settingsManager.userName.collectAsState()
     
     // Permission handling
     var hasPermission by remember { mutableStateOf(false) }
@@ -51,6 +54,49 @@ fun HomeScreen(
     
     // Settings state
     var showSettings by remember { mutableStateOf(false) }
+    
+    // Welcome Dialog state
+    var showWelcomeDialog by remember { mutableStateOf(false) }
+    
+    // Check if name is set on first load
+    LaunchedEffect(Unit) {
+        if (settingsManager.getUserName().isEmpty()) {
+            showWelcomeDialog = true
+        }
+    }
+
+    if (showWelcomeDialog) {
+        var tempName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { /* Force user to enter name */ },
+            title = { Text("Welcome to Luna") },
+            text = {
+                Column {
+                    Text("Please enter your name to get started.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tempName,
+                        onValueChange = { tempName = it },
+                        label = { Text("Name") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (tempName.isNotBlank()) {
+                            settingsManager.setUserName(tempName)
+                            showWelcomeDialog = false
+                        }
+                    },
+                    enabled = tempName.isNotBlank()
+                ) {
+                    Text("Continue")
+                }
+            }
+        )
+    }
     
     // Handle back button when player is open
     BackHandler(enabled = showFullScreenPlayer || showSettings) {
@@ -117,12 +163,22 @@ fun HomeScreen(
             topBar = {
                 LargeTopAppBar(
                     title = { 
-                        Text(
-                            "Library",
-                            style = MaterialTheme.typography.displaySmall.copy(
-                                fontWeight = FontWeight.Bold
+                        Column {
+                            if (userName.isNotEmpty()) {
+                                Text(
+                                    text = "Hey $userName,",
+                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                            }
+                             Text(
+                                "Library",
+                                style = MaterialTheme.typography.displaySmall.copy(
+                                    fontWeight = FontWeight.Bold
+                                )
                             )
-                        ) 
+                        }
                     },
                     actions = {
                         IconButton(onClick = { showSettings = true }) {
