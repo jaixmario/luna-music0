@@ -93,9 +93,6 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
                 if (playbackState == Player.STATE_READY) {
                     _duration.value = controller?.duration ?: 0L
                 }
-                if (playbackState == Player.STATE_ENDED) {
-                    playNext()
-                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -144,6 +141,11 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     fun playSong(song: Song) {
         val player = controller ?: return
         
+        val currentList = _songs.value
+        val startIndex = currentList.indexOfFirst { it.id == song.id }
+        
+        if (startIndex == -1) return
+
         if (_currentSong.value?.id == song.id) {
             if (_isPlaying.value) pause() else play()
             return
@@ -151,20 +153,22 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
         _currentSong.value = song
         
-        val mediaMetadata = MediaMetadata.Builder()
-            .setTitle(song.title)
-            .setArtist(song.artist)
-            .setAlbumTitle(song.album)
-            .setArtworkUri(song.albumArtUri)
-            .build()
+        val mediaItems = currentList.map { track ->
+            val mediaMetadata = MediaMetadata.Builder()
+                .setTitle(track.title)
+                .setArtist(track.artist)
+                .setAlbumTitle(track.album)
+                .setArtworkUri(track.albumArtUri)
+                .build()
             
-        val mediaItem = MediaItem.Builder()
-            .setUri(song.contentUri)
-            .setMediaId(song.id.toString())
-            .setMediaMetadata(mediaMetadata)
-            .build()
+            MediaItem.Builder()
+                .setUri(track.contentUri)
+                .setMediaId(track.id.toString())
+                .setMediaMetadata(mediaMetadata)
+                .build()
+        }
 
-        player.setMediaItem(mediaItem)
+        player.setMediaItems(mediaItems, startIndex, 0L)
         player.prepare()
         player.play()
     }
@@ -178,25 +182,11 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playNext() {
-        val currentList = _songs.value
-        val current = _currentSong.value ?: return
-        val index = currentList.indexOfFirst { it.id == current.id }
-        if (index != -1 && index < currentList.size - 1) {
-            playSong(currentList[index + 1])
-        } else if (currentList.isNotEmpty()) {
-             playSong(currentList[0])
-        }
+        controller?.seekToNextMediaItem()
     }
 
     fun playPrevious() {
-        val currentList = _songs.value
-        val current = _currentSong.value ?: return
-        val index = currentList.indexOfFirst { it.id == current.id }
-        if (index > 0) {
-            playSong(currentList[index - 1])
-        } else if (currentList.isNotEmpty()){
-            playSong(currentList.last())
-        }
+        controller?.seekToPreviousMediaItem()
     }
 
     fun seekTo(position: Long) {

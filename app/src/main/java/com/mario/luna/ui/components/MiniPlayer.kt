@@ -7,6 +7,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,6 +30,8 @@ fun MiniPlayer(
     isPlaying: Boolean,
     progress: Float,
     onTogglePlay: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Elevate the MiniPlayer above other content to avoid overlap issues
@@ -35,7 +39,7 @@ fun MiniPlayer(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 8.dp)
-            .height(64.dp),
+            .height(72.dp), // Increased height slightly to accommodate controls
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         tonalElevation = 8.dp
@@ -102,10 +106,24 @@ fun MiniPlayer(
                     )
                 }
 
+                IconButton(onClick = onPrevious) {
+                    Icon(
+                        imageVector = Icons.Default.SkipPrevious,
+                        contentDescription = "Previous"
+                    )
+                }
+
                 IconButton(onClick = onTogglePlay) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play"
+                    )
+                }
+
+                IconButton(onClick = onNext) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = "Next"
                     )
                 }
             }
