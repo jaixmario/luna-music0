@@ -1,5 +1,10 @@
 package com.mario.luna.ui.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,11 +13,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -30,6 +37,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,10 +71,6 @@ fun FullScreenPlayer(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surface
     ) {
-        // Background with subtle gradient or just surface color
-        // For a more modern feel, we could use a blurred version of the album art as background,
-        // but let's stick to a clean iOS-style look for now.
-        
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -91,7 +95,6 @@ fun FullScreenPlayer(
                     )
                 }
                 
-                // Optional: "Now Playing" text
                 Text(
                     text = "Now Playing",
                     style = MaterialTheme.typography.titleMedium.copy(
@@ -113,6 +116,24 @@ fun FullScreenPlayer(
                     .clip(RoundedCornerShape(24.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             ) {
+                // Fallback layer (always behind)
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isPlaying) {
+                        BigAudioWaveAnimation()
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = "Music",
+                            modifier = Modifier.size(120.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Image layer (on top)
                 if (song.albumArtUri != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
@@ -122,15 +143,6 @@ fun FullScreenPlayer(
                         contentDescription = "Album Art",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                     Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = "Music",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -247,4 +259,87 @@ fun formatTime(ms: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return String.format("%02d:%02d", minutes, seconds)
+}
+
+@Composable
+fun BigAudioWaveAnimation() {
+    val infiniteTransition = rememberInfiniteTransition(label = "big_audio_wave")
+    
+    // Create 5 bars with different phases for bigger animation
+    val height1 by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar1"
+    )
+    
+    val height2 by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(750),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar2"
+    )
+    
+    val height3 by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar3"
+    )
+    
+     val height4 by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar4"
+    )
+    
+    val height5 by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(650),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar5"
+    )
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier.size(150.dp)
+    ) {
+        BigBar(height1)
+        Spacer(modifier = Modifier.width(8.dp))
+        BigBar(height2)
+        Spacer(modifier = Modifier.width(8.dp))
+        BigBar(height3)
+        Spacer(modifier = Modifier.width(8.dp))
+        BigBar(height4)
+        Spacer(modifier = Modifier.width(8.dp))
+        BigBar(height5)
+    }
+}
+
+@Composable
+fun BigBar(fraction: Float) {
+    Surface(
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .width(12.dp)
+            .fillMaxHeight(fraction)
+            .clip(RoundedCornerShape(6.dp))
+    ) {}
 }

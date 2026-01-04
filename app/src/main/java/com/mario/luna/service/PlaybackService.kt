@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.mario.luna.MainActivity
+import com.mario.luna.data.SettingsManager
 
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
@@ -25,7 +26,6 @@ class PlaybackService : MediaSessionService() {
             )
             .build()
         
-        // This is the main intent that will be launched when clicking on the notification
         val sessionActivityPendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -36,6 +36,15 @@ class PlaybackService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivityPendingIntent)
             .build()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val settingsManager = SettingsManager.getInstance(this)
+        if (!settingsManager.isBackgroundPlayEnabled()) {
+             mediaSession?.player?.stop()
+             stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
