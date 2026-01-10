@@ -21,7 +21,9 @@ fun SettingsScreen(
     val settingsManager = remember { SettingsManager.getInstance(context) }
     val backgroundPlayEnabled by settingsManager.backgroundPlayEnabled.collectAsState()
     val userName by settingsManager.userName.collectAsState()
+    val downloadServerUrl by settingsManager.downloadServerUrl.collectAsState()
     var showNameDialog by remember { mutableStateOf(false) }
+    var showServerUrlDialog by remember { mutableStateOf(false) }
 
     if (showNameDialog) {
         var tempName by remember { mutableStateOf(userName) }
@@ -47,6 +49,36 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showNameDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showServerUrlDialog) {
+        var tempUrl by remember { mutableStateOf(downloadServerUrl) }
+        AlertDialog(
+            onDismissRequest = { showServerUrlDialog = false },
+            title = { Text("Change Download Server") },
+            text = {
+                OutlinedTextField(
+                    value = tempUrl,
+                    onValueChange = { tempUrl = it },
+                    label = { Text("Server URL") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settingsManager.setDownloadServerUrl(tempUrl)
+                        showServerUrlDialog = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showServerUrlDialog = false }) {
                     Text("Cancel")
                 }
             }
@@ -100,6 +132,43 @@ fun SettingsScreen(
                     )
                 }
                 Button(onClick = { showNameDialog = true }) {
+                    Text("Edit")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Advanced",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                ),
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Download Server",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = downloadServerUrl,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+                Button(onClick = { showServerUrlDialog = true }) {
                     Text("Edit")
                 }
             }

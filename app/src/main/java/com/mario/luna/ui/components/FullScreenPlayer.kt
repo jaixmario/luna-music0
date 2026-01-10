@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,24 +21,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,11 +51,13 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.mario.luna.model.Song
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FullScreenPlayer(
     song: Song,
+    playlist: List<Song>,
     isPlaying: Boolean,
     progress: Long,
     duration: Long,
@@ -65,8 +65,34 @@ fun FullScreenPlayer(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onSongClick: (Song) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
+    var showPlaylist by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+
+    if (showPlaylist) {
+        ModalBottomSheet(
+            onDismissRequest = { showPlaylist = false },
+            sheetState = sheetState
+        ) {
+            Text("Upcoming", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                itemsIndexed(playlist) { index, track ->
+                    PlaylistItem(
+                        song = track,
+                        isCurrentlyPlaying = track.id == song.id,
+                        onClick = { 
+                            onSongClick(track)
+                            scope.launch { sheetState.hide() }.invokeOnCompletion { showPlaylist = false }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surface
@@ -74,10 +100,10 @@ fun FullScreenPlayer(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 48.dp, bottom = 48.dp, start = 24.dp, end = 24.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Drag handle / Dismiss button area
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -107,7 +133,6 @@ fun FullScreenPlayer(
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // Album Art
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -116,7 +141,6 @@ fun FullScreenPlayer(
                     .clip(RoundedCornerShape(24.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             ) {
-                // Fallback layer (always behind)
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -132,8 +156,6 @@ fun FullScreenPlayer(
                         )
                     }
                 }
-
-                // Image layer (on top)
                 if (song.albumArtUri != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
@@ -147,9 +169,8 @@ fun FullScreenPlayer(
                 }
             }
 
-            Spacer(modifier = Modifier.height(64.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-            // Song Info
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.Start
@@ -174,9 +195,8 @@ fun FullScreenPlayer(
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Progress Bar
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -206,9 +226,8 @@ fun FullScreenPlayer(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Controls
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -248,8 +267,60 @@ fun FullScreenPlayer(
                     )
                 }
             }
-            
-            Spacer(modifier = Modifier.height(48.dp))
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            IconButton(onClick = { showPlaylist = true }) {
+                Icon(Icons.Default.PlaylistPlay, contentDescription = "Playlist")
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistItem(
+    song: Song,
+    isCurrentlyPlaying: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (isCurrentlyPlaying) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent
+    val contentColor = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(song.albumArtUri)
+                .crossfade(true)
+                .error(android.R.drawable.ic_menu_report_image)
+                .build(),
+            contentDescription = "Album Art",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(4.dp))
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = song.title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold, color = contentColor),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = song.artist,
+                style = MaterialTheme.typography.bodySmall.copy(color = contentColor.copy(alpha = 0.7f)),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

@@ -15,6 +15,9 @@ class SettingsManager(context: Context) {
     private val _userName = MutableStateFlow(prefs.getString(KEY_USER_NAME, "") ?: "")
     val userName: StateFlow<String> = _userName.asStateFlow()
 
+    private val _downloadServerUrl = MutableStateFlow(prefs.getString(KEY_DOWNLOAD_SERVER, "https://375643f1-04d4-4967-ad85-1994a8b97acd-00-dyu0ryu973pt.pike.replit.dev") ?: "")
+    val downloadServerUrl: StateFlow<String> = _downloadServerUrl.asStateFlow()
+
     fun setBackgroundPlayEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_BG_PLAY, enabled).apply()
         _backgroundPlayEnabled.value = enabled
@@ -33,9 +36,19 @@ class SettingsManager(context: Context) {
         return prefs.getString(KEY_USER_NAME, "") ?: ""
     }
 
+    fun setDownloadServerUrl(url: String) {
+        prefs.edit().putString(KEY_DOWNLOAD_SERVER, url).apply()
+        _downloadServerUrl.value = url
+    }
+
+    fun getDownloadServerUrl(): String {
+        return prefs.getString(KEY_DOWNLOAD_SERVER, "https://375643f1-04d4-4967-ad85-1994a8b97acd-00-dyu0ryu973pt.pike.replit.dev") ?: ""
+    }
+
     companion object {
         private const val KEY_BG_PLAY = "background_play_enabled"
         private const val KEY_USER_NAME = "user_name"
+        private const val KEY_DOWNLOAD_SERVER = "download_server"
         
         @Volatile
         private var INSTANCE: SettingsManager? = null

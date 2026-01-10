@@ -23,9 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -36,6 +34,7 @@ import com.mario.luna.ui.components.FullScreenPlayer
 import com.mario.luna.ui.components.MiniPlayer
 import com.mario.luna.ui.components.MusicListItem
 import com.mario.luna.viewmodel.AudioViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,14 +51,16 @@ fun HomeScreen(
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager.getInstance(context) }
     val userName by settingsManager.userName.collectAsState()
-    
-    // State for song-specific actions
-    var songForInfo by remember { mutableStateOf<Song?>(null) }
-    var songToDelete by remember { mutableStateOf<Song?>(null) }
-    
+
     // Permission handling
     var hasPermission by remember { mutableStateOf(false) }
     
+    // State for song-specific actions
+    var songForInfo by remember { mutableStateOf<Song?>(null) }
+    var songForAction by remember { mutableStateOf<Song?>(null) }
+    val scope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState()
+
     // UI states
     var showFullScreenPlayer by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
@@ -70,11 +71,11 @@ fun HomeScreen(
         contract = ActivityResultContracts.StartIntentSenderForResult(),
         onResult = { result ->
             if (result.resultCode == Activity.RESULT_OK) {
-                songToDelete?.let { viewModel.onDeletionComplete(true, it) }
+                songForAction?.let { viewModel.onDeletionComplete(true, it) }
             } else {
-                songToDelete?.let { viewModel.onDeletionComplete(false, it) }
+                songForAction?.let { viewModel.onDeletionComplete(false, it) }
             }
-            songToDelete = null
+            songForAction = null
         }
     )
 
@@ -89,28 +90,49 @@ fun HomeScreen(
         SongInfoDialog(song = song, onDismiss = { songForInfo = null })
     }
 
-    // Show Delete Confirmation Dialog
-    songToDelete?.let { song ->
-        AlertDialog(
-            onDismissRequest = { songToDelete = null },
-            title = { Text("Delete Song") },
-            text = { Text("Are you sure you want to delete '${song.title}'? This action cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteSong(song)
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { songToDelete = null }) {
-                    Text("Cancel")
-                }
+    // Show long-press action menu
+    if (songForAction != null) {
+        ModalBottomSheet(
+            onDismissRequest = { songForAction = null },
+            sheetState = sheetState
+        ) {
+            Column(Modifier.padding(bottom = 32.dp)) {
+                ListItem(
+                    headlineContent = { Text("Play Next") },
+                    leadingContent = { Icon(Icons.Default.SkipNext, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        songForAction?.let { viewModel.playNext(it) }
+                        scope.launch { sheetState.hide() }.invokeOnCompletion { songForAction = null }
+                    }
+                )
+                ListItem(
+                    headlineContent = { Text("Add to Queue") },
+                    leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        songForAction?.let { viewModel.addToQueue(it) }
+                        scope.launch { sheetState.hide() }.invokeOnCompletion { songForAction = null }
+                    }
+                )
+                Divider()
+                ListItem(
+                    headlineContent = { Text("Info") },
+                    leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        songForInfo = songForAction
+                        scope.launch { sheetState.hide() }.invokeOnCompletion { songForAction = null }
+                    }
+                )
+                 ListItem(
+                    headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                    leadingContent = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    modifier = Modifier.clickable {
+                        // No need for a separate dialog, just call delete directly
+                        songForAction?.let { viewModel.deleteSong(it) }
+                        scope.launch { sheetState.hide() }.invokeOnCompletion { songForAction = null }
+                    }
+                )
             }
-        )
+        }
     }
     
     // Check if name is set on first load
@@ -208,6 +230,7 @@ fun HomeScreen(
     } else if (showFullScreenPlayer && currentSong != null) {
         FullScreenPlayer(
             song = currentSong!!,
+            playlist = songs,
             isPlaying = isPlaying,
             progress = progress,
             duration = duration,
@@ -215,7 +238,8 @@ fun HomeScreen(
             onNext = { viewModel.playNext() },
             onPrevious = { viewModel.playPrevious() },
             onSeek = { viewModel.seekTo(it) },
-            onDismiss = { showFullScreenPlayer = false }
+            onDismiss = { showFullScreenPlayer = false },
+            onSongClick = { viewModel.playSong(it) }
         )
     } else {
         Scaffold(
@@ -294,66 +318,13 @@ fun HomeScreen(
                 ) {
                     items(songs) { song ->
                         val isCurrentSong = currentSong?.id == song.id
-                        var showMenu by remember { mutableStateOf(false) }
-                        var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
-                        val density = LocalDensity.current
-
-                        Box {
-                            MusicListItem(
-                                song = song,
-                                isPlaying = isCurrentSong && isPlaying,
-                                onClick = { viewModel.playSong(song) },
-                                onLongClick = { offset ->
-                                    with(density) {
-                                        menuOffset = DpOffset(offset.x.toDp(), offset.y.toDp())
-                                    }
-                                    showMenu = true 
-                                }
-                            )
-
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false },
-                                offset = menuOffset,
-                                shape = RoundedCornerShape(16.dp),
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Play Next") },
-                                    leadingIcon = { Icon(Icons.Default.SkipNext, contentDescription = null) },
-                                    onClick = {
-                                        viewModel.playNext(song)
-                                        showMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Add to Queue") },
-                                    leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-                                    onClick = {
-                                        viewModel.addToQueue(song)
-                                        showMenu = false
-                                    }
-                                )
-                                Divider()
-                                DropdownMenuItem(
-                                    text = { Text("Info") },
-                                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
-                                    onClick = {
-                                        songForInfo = song
-                                        showMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Delete") },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                                    onClick = {
-                                        songToDelete = song
-                                        showMenu = false
-                                    },
-                                    colors = MenuDefaults.itemColors(leadingIconColor = MaterialTheme.colorScheme.error, textColor = MaterialTheme.colorScheme.error)
-                                )
-                            }
-                        }
+                        
+                        MusicListItem(
+                            song = song,
+                            isPlaying = isCurrentSong && isPlaying,
+                            onClick = { viewModel.playSong(song) },
+                            onLongClick = { songForAction = song }
+                        )
                         
                         Divider(
                             color = Color.LightGray.copy(alpha = 0.2f),

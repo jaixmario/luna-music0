@@ -63,7 +63,6 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
             controller = controllerFuture?.get()
             setupPlayerListener()
             
-            // Sync initial state from service
             controller?.let { player ->
                 if (player.isPlaying) {
                     _isPlaying.value = true
@@ -83,7 +82,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
                     _progress.value = controller?.currentPosition ?: 0L
                     _isPlaying.value = true
                 }
-                delay(1000)
+                delay(200) // Smoother progress updates
             }
         }
     }
@@ -151,20 +150,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
 
         _currentSong.value = song
         
-        val mediaItems = currentList.map { track ->
-            val mediaMetadata = MediaMetadata.Builder()
-                .setTitle(track.title)
-                .setArtist(track.artist)
-                .setAlbumTitle(track.album)
-                .setArtworkUri(track.albumArtUri)
-                .build()
-            
-            MediaItem.Builder()
-                .setUri(track.contentUri)
-                .setMediaId(track.id.toString())
-                .setMediaMetadata(mediaMetadata)
-                .build()
-        }
+        val mediaItems = currentList.map { it.toMediaItem() }
 
         player.setMediaItems(mediaItems, startIndex, 0L)
         player.prepare()
@@ -173,41 +159,32 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     
     fun playNext(song: Song) {
         val player = controller ?: return
-        val count = player.mediaItemCount
-        var fromIndex = -1
-        
-        for (i in 0 until count) {
-            val item = player.getMediaItemAt(i)
-            if (item.mediaId == song.id.toString()) {
-                fromIndex = i
-                break
-            }
-        }
-        
-        if (fromIndex != -1) {
-            var targetIndex = player.currentMediaItemIndex + 1
-            if (targetIndex >= count) {
-                targetIndex = count - 1
-            }
-            player.moveMediaItem(fromIndex, targetIndex)
+        val fromIndex = _songs.value.indexOfFirst { it.id == song.id }
+        if (fromIndex == -1) return
+
+        val currentPlayingIndex = player.currentMediaItemIndex
+        if (currentPlayingIndex == -1) return
+
+        val toIndex = currentPlayingIndex + 1
+        player.moveMediaItem(fromIndex, toIndex)
+
+        _songs.value = _songs.value.toMutableList().apply {
+            val itemToMove = removeAt(fromIndex)
+            add(if (fromIndex < toIndex) toIndex - 1 else toIndex, itemToMove)
         }
     }
-    
+
     fun addToQueue(song: Song) {
         val player = controller ?: return
-        val count = player.mediaItemCount
-        var fromIndex = -1
-        
-        for (i in 0 until count) {
-            val item = player.getMediaItemAt(i)
-            if (item.mediaId == song.id.toString()) {
-                fromIndex = i
-                break
-            }
-        }
-        
-        if (fromIndex != -1) {
-            player.moveMediaItem(fromIndex, count - 1)
+        val fromIndex = _songs.value.indexOfFirst { it.id == song.id }
+        if (fromIndex == -1) return
+
+        val toIndex = player.mediaItemCount
+        player.moveMediaItem(fromIndex, toIndex)
+
+        _songs.value = _songs.value.toMutableList().apply {
+            val itemToMove = removeAt(fromIndex)
+            add(itemToMove)
         }
     }
 
@@ -224,7 +201,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
             } catch (e: Exception) {
-                // Handle error - maybe show a toast
+                // Handle error
             }
         }
     }
@@ -270,6 +247,21 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     fun seekTo(position: Long) {
         controller?.seekTo(position)
         _progress.value = position
+    }
+
+    private fun Song.toMediaItem(): MediaItem {
+        val mediaMetadata = MediaMetadata.Builder()
+            .setTitle(this.title)
+            .setArtist(this.artist)
+            .setAlbumTitle(this.album)
+            .setArtworkUri(this.albumArtUri)
+            .build()
+        
+        return MediaItem.Builder()
+            .setUri(this.contentUri)
+            .setMediaId(this.id.toString())
+            .setMediaMetadata(mediaMetadata)
+            .build()
     }
 
     override fun onCleared() {

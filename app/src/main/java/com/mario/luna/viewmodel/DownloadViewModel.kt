@@ -6,6 +6,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.mario.luna.data.SettingsManager
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -33,6 +34,8 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val settingsManager = SettingsManager.getInstance(application)
+
     private val ktorClient = HttpClient(OkHttp) {
         install(HttpTimeout) {
             requestTimeoutMillis = 60000 // 1 minute
@@ -48,7 +51,8 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
             _errorMessage.value = null
             try {
                 val encodedUrl = URLEncoder.encode(url, "UTF-8")
-                val downloadUrl = "https://375643f1-04d4-4967-ad85-1994a8b97acd-00-dyu0ryu973pt.pike.replit.dev/download?url=$encodedUrl"
+                val baseUrl = settingsManager.getDownloadServerUrl()
+                val downloadUrl = "$baseUrl/download?url=$encodedUrl"
 
                 val httpResponse: HttpResponse = ktorClient.get(downloadUrl)
 
