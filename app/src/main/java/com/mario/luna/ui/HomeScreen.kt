@@ -1,10 +1,12 @@
 package com.mario.luna.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,9 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mario.luna.data.SettingsManager
+import com.mario.luna.model.Song
 import com.mario.luna.ui.components.FullScreenPlayer
 import com.mario.luna.ui.components.MiniPlayer
 import com.mario.luna.ui.components.MusicListItem
@@ -45,22 +47,71 @@ fun HomeScreen(
     val isPlaying by viewModel.isPlaying.collectAsState()
     val progress by viewModel.progress.collectAsState()
     val duration by viewModel.duration.collectAsState()
+    val deleteRequest by viewModel.deleteRequest.collectAsState()
 
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager.getInstance(context) }
     val userName by settingsManager.userName.collectAsState()
     
+    // State for song-specific actions
+    var songForInfo by remember { mutableStateOf<Song?>(null) }
+    var songToDelete by remember { mutableStateOf<Song?>(null) }
+    
     // Permission handling
     var hasPermission by remember { mutableStateOf(false) }
     
-    // Full screen player state
+    // UI states
     var showFullScreenPlayer by remember { mutableStateOf(false) }
-    
-    // Settings state
     var showSettings by remember { mutableStateOf(false) }
-    
-    // Welcome Dialog state
+    var showDownloadSheet by remember { mutableStateOf(false) }
     var showWelcomeDialog by remember { mutableStateOf(false) }
+
+    val deleteLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult(),
+        onResult = { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                songToDelete?.let { viewModel.onDeletionComplete(true, it) }
+            } else {
+                songToDelete?.let { viewModel.onDeletionComplete(false, it) }
+            }
+            songToDelete = null
+        }
+    )
+
+    LaunchedEffect(deleteRequest) {
+        deleteRequest?.let {
+            deleteLauncher.launch(it)
+        }
+    }
+
+    // Show Song Info Dialog
+    songForInfo?.let { song ->
+        SongInfoDialog(song = song, onDismiss = { songForInfo = null })
+    }
+
+    // Show Delete Confirmation Dialog
+    songToDelete?.let { song ->
+        AlertDialog(
+            onDismissRequest = { songToDelete = null },
+            title = { Text("Delete Song") },
+            text = { Text("Are you sure you want to delete '${song.title}'? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteSong(song)
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { songToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
     
     // Check if name is set on first load
     LaunchedEffect(Unit) {
@@ -122,9 +173,7 @@ fun HomeScreen(
     
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) {
-        // Notification permission granted or denied, not critical for app function but good for controls
-    }
+    ) {}
 
     LaunchedEffect(Unit) {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -140,12 +189,18 @@ fun HomeScreen(
              permissionLauncher.launch(permission)
         }
         
-        // Request notification permission for Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+    }
+
+    if (showDownloadSheet) {
+        DownloadScreen(
+            onDismiss = { showDownloadSheet = false },
+            onDownloadComplete = { viewModel.loadSongs() }
+        )
     }
 
     if (showSettings) {
@@ -185,6 +240,9 @@ fun HomeScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { showDownloadSheet = true }) {
+                            Icon(Icons.Default.Download, contentDescription = "Download")
+                        }
                         IconButton(onClick = { showSettings = true }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
@@ -197,7 +255,6 @@ fun HomeScreen(
             },
             bottomBar = {
                 if (currentSong != null) {
-                    // Use WindowInsets to add padding for the system navigation bar
                     val navigationBarInsets = WindowInsets.navigationBars.asPaddingValues()
                     Box(
                         modifier = Modifier.padding(navigationBarInsets)
@@ -238,18 +295,26 @@ fun HomeScreen(
                     items(songs) { song ->
                         val isCurrentSong = currentSong?.id == song.id
                         var showMenu by remember { mutableStateOf(false) }
+                        var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
+                        val density = LocalDensity.current
 
                         Box {
                             MusicListItem(
                                 song = song,
                                 isPlaying = isCurrentSong && isPlaying,
                                 onClick = { viewModel.playSong(song) },
-                                onLongClick = { showMenu = true }
+                                onLongClick = { offset ->
+                                    with(density) {
+                                        menuOffset = DpOffset(offset.x.toDp(), offset.y.toDp())
+                                    }
+                                    showMenu = true 
+                                }
                             )
 
                             DropdownMenu(
                                 expanded = showMenu,
                                 onDismissRequest = { showMenu = false },
+                                offset = menuOffset,
                                 shape = RoundedCornerShape(16.dp),
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                             ) {
@@ -269,21 +334,69 @@ fun HomeScreen(
                                         showMenu = false
                                     }
                                 )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text("Info") },
+                                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                                    onClick = {
+                                        songForInfo = song
+                                        showMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete") },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                    onClick = {
+                                        songToDelete = song
+                                        showMenu = false
+                                    },
+                                    colors = MenuDefaults.itemColors(leadingIconColor = MaterialTheme.colorScheme.error, textColor = MaterialTheme.colorScheme.error)
+                                )
                             }
                         }
                         
                         Divider(
                             color = Color.LightGray.copy(alpha = 0.2f),
-                            modifier = Modifier.padding(start = 88.dp) // Indent divider like iOS
+                            modifier = Modifier.padding(start = 88.dp)
                         )
                     }
                     
-                    // Add some bottom padding so the last item isn't covered by the mini player if present
                     item {
                         Spacer(modifier = Modifier.height(100.dp))
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun SongInfoDialog(song: Song, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Song Info") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                InfoRow("Title", song.title)
+                InfoRow("Artist", song.artist)
+                InfoRow("Album", song.album)
+                InfoRow("Duration", "${song.duration / 1000}s")
+                InfoRow("File Name", song.displayName)
+                InfoRow("Location", song.relativePath)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+fun InfoRow(label: String, value: String) {
+    Row {
+        Text("$label: ", fontWeight = FontWeight.Bold, modifier = Modifier.width(80.dp))
+        Text(value)
     }
 }
